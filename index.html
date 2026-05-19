@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title> 遊覽車雲端選位 </title>
   <script>
-    // 💡 請記得將下方雙引號內的網址，更換為您新部署的 GAS 網址
+    // 💡 已自動載入您最新的 GAS 部署網址
     const API_URL = "https://script.google.com/macros/s/AKfycbxh95uyAG8fpZVxaL91CaFfwt6VBXk-mRXbMzWaYHL0J3pThei0tHoVjIFCl0p27jSx/exec";
   </script>
   <style>
@@ -77,10 +77,6 @@
       padding: 4px 8px;
       margin: 3px;
     }
-    .person.done {
-      background: #e8f5e9;
-      border-color: #81c784;
-    }
     .notice {
       font-size: 14px;
       color: #444;
@@ -101,7 +97,6 @@
       cursor: pointer;
       font-size: 13px;
     }
-    /* 管理員面板預設隱藏，通過暗號解鎖後才會顯示 */
     .admin-panel {
       display: none;
       background: #f3e5f5;
@@ -130,7 +125,6 @@
       opacity: 1;
       pointer-events: auto;
     }
-    /* 移除所有子類別重複的 background，統一由 .cell 預設為 white */
     .cell {
       min-height: 46px;
       border-right: 1px solid #444;
@@ -160,25 +154,24 @@
       background: #4CAF50 !important;
       color: white;
     }
-    .seat.pending {
-      opacity: .5;
-      pointer-events: none;
-    }
     .tv {
       color: #d32f2f;
-      background: #fff5f5;
       font-weight: bold;
+      background: #fff5f5;
     }
     .door {
       color: #d32f2f;
-      background: #fff8f8;
       font-weight: bold;
+      background: #fff8f8;
     }
     .aisle {
       writing-mode: vertical-rl;
       letter-spacing: 8px;
       font-weight: bold;
       color: #111;
+    }
+    .empty {
+      background: #fff;
     }
     .num-hint {
       position: absolute;
@@ -193,7 +186,6 @@
       padding: 4px;
       word-break: break-all;
     }
-    /* 圖例優化：Flexbox 完美置中，無須 vertical-align */
     .legend {
       display: flex;
       justify-content: center;
@@ -214,7 +206,6 @@
     }
     .empty-box { background: white; }
     .occupied-box { background: #4CAF50; }
-    .open-box { background: #fff8e1; }
   </style>
 </head>
 <body>
@@ -223,18 +214,21 @@
       <h2 onclick="showAdminSecretly()"> 🚌  遊覽車雲端選位 </h2>
       <div id="status-text"> 正在同步資料 ...</div>
       <div id="round-box"> 目前開放中 ...</div>
-      <div id="count-box"> 已選  0  位｜剩餘  0  位 </div>
+      <div id="count-box"> 已選 0 位｜剩餘 0 位 </div>
+      
       <div class="order-panel">
         <div class="panel-title"> ✅   目前可選名單 </div>
         <div id="current-list"></div>
         <div class="panel-title next"> ⏳   下一輪準備名單 </div>
         <div id="next-list"></div>
       </div>
+      
       <div class="notice">
         請直接輸入您的姓名選位。 <br>
         若要更換座位，直接點新的空位即可。 <br>
         家人或同行者可依照上方名單順序一起準備。
       </div>
+      
       <div class="toolbar">
         <button onclick="loadSeats()"> 手動刷新 </button>
       </div>
@@ -246,7 +240,7 @@
         <div id="admin-status" style="font-size:12px; color:purple; margin-top:4px;"></div>
       </div>
     </div>
-    
+
     <div id="bus-container"></div>
 
     <div class="legend">
@@ -256,13 +250,12 @@
   </div>
 
   <script>
-    document.getElementById("status-text").innerText = " ✅  Netlify  已成功載入 ";
+    document.getElementById("status-text").innerText = " ✅  Netlify 連線正常 ";
     
     let isAdminAuthenticated = false; 
     let clickCount = 0;
     let clickTimer = null;
 
-    // 暗號機制：2秒內連續點擊標題 3 次解鎖後台
     function showAdminSecretly() {
       clickCount++;
       clearTimeout(clickTimer);
@@ -273,7 +266,7 @@
         let pwd = prompt("請輸入管理員認證密碼：");
         if (!pwd) return;
 
-        document.getElementById("status-text").innerText = " 🔐 正在驗證身分... ";
+        document.getElementById("status-text").innerText = " 🔐 正在驗證管理員身分... ";
         
         fetch(API_URL, {
           method: "POST",
@@ -285,82 +278,153 @@
             isAdminAuthenticated = true;
             document.getElementById("admin-panel").style.display = "block";
             document.getElementById("admin-status").innerText = "⚠️ 目前已驗證：管理員模式（可強制覆寫）";
-            alert("🎉 認證成功！管理員後台面板已開啟。");
+            alert("🎉 認證成功！管理員專屬後台面板已開啟。");
             loadSeats();
           } else {
-            alert("❌ 密碼錯誤，拒絕存取！");
+            alert("❌ 密碼錯誤，身分認證失敗！");
           }
           document.getElementById("status-text").innerText = " ✅ 系統正常 ";
         })
-        .catch(err => {
-          alert("網路連線失敗，請稍後再試");
+        .catch(() => {
+          alert("網路連線超時，請重新再試");
           document.getElementById("status-text").innerText = " ❌ 連線錯誤 ";
         });
       }
     }
 
-    // 讀取座位與名單（對接 GAS 分頁）
+    // 🚌 精確對照截圖：完美對接 12 排遊覽車網格矩陣 (ID 完全符合試算表)
+    const BUS_LAYOUT = [
+      // 第一排
+      { type: "label", text: "第一排" }, { type: "seat", id: "s11" }, { type: "seat", id: "s12" }, { type: "aisle", text: "走道" }, { type: "empty", text: "" }, { type: "empty", text: "" },
+      // 空白列 (前門設施)
+      { type: "empty", text: "" }, { type: "empty", text: "" }, { type: "empty", text: "" }, { type: "aisle", text: "走道" }, { type: "door", text: "前門" }, { type: "empty", text: "" },
+      // 第二排
+      { type: "label", text: "第二排" }, { type: "seat", id: "s21" }, { type: "seat", id: "s22" }, { type: "aisle", text: "走道" }, { type: "label", text: "領隊" }, { type: "label", text: "第三排" },
+      // 第三排
+      { type: "label", text: "第三排" }, { type: "seat", id: "s31" }, { type: "seat", id: "s32" }, { type: "aisle", text: "走道" }, { type: "empty", text: "" }, { type: "empty", text: "" },
+      // 小電視列
+      { type: "empty", text: "" }, { type: "empty", text: "" }, { type: "tv", text: "小電視" }, { type: "aisle", text: "走道" }, { type: "empty", text: "" }, { type: "label", text: "第四排" },
+      // 第四排
+      { type: "label", text: "第四排" }, { type: "seat", id: "s41" }, { type: "seat", id: "s42" }, { type: "aisle", text: "走道" }, { type: "seat", id: "s43" }, { type: "empty", text: "" },
+      // 第五排
+      { type: "label", text: "第五排" }, { type: "seat", id: "s51" }, { type: "seat", id: "s52" }, { type: "aisle", text: "走道" }, { type: "seat", id: "s53" }, { type: "label", text: "第五排" },
+      // 空白列
+      { type: "empty", text: "" }, { type: "empty", text: "" }, { type: "empty", text: "" }, { type: "aisle", text: "走道" }, { type: "empty", text: "" }, { type: "empty", text: "" },
+      // 第六排
+      { type: "label", text: "第六排" }, { type: "seat", id: "s61" }, { type: "seat", id: "s62" }, { type: "aisle", text: "走道" }, { type: "seat", id: "s63" }, { type: "label", text: "第六排" },
+      // 緊急出口列
+      { type: "door", text: "緊急出口" }, { type: "empty", text: "" }, { type: "tv", text: "小電視" }, { type: "aisle", text: "走道" }, { type: "seat", id: "s73" }, { type: "label", text: "第七排" },
+      // 第七排
+      { type: "label", text: "第七排" }, { type: "seat", id: "s71" }, { type: "seat", id: "s72" }, { type: "aisle", text: "走道" }, { type: "empty", text: "" }, { type: "empty", text: "" },
+      // 第八排
+      { type: "label", text: "第八排" }, { type: "seat", id: "s81" }, { type: "seat", id: "s82" }, { type: "aisle", text: "走道" }, { type: "door", text: "後門" }, { type: "empty", text: "" },
+      // 第九排
+      { type: "label", text: "第九排" }, { type: "seat", id: "s91" }, { type: "seat", id: "s92" }, { type: "aisle", text: "走道" }, { type: "tv", text: "小電視" }, { type: "empty", text: "" },
+      // 電視列
+      { type: "empty", text: "" }, { type: "empty", text: "" }, { type: "tv", text: "小電視" }, { type: "aisle", text: "走道" }, { type: "seat", id: "s93" }, { type: "label", text: "第九排" },
+      // 第十排
+      { type: "label", text: "第十排" }, { type: "seat", id: "s101" }, { type: "seat", id: "s102" }, { type: "aisle", text: "走道" }, { type: "seat", id: "s103" }, { type: "label", text: "第十排" },
+      // 第十一排
+      { type: "label", text: "第十一排" }, { type: "seat", id: "s111" }, { type: "seat", id: "s112" }, { type: "aisle", text: "走道" }, { type: "seat", id: "s113" }, { type: "label", text: "第十一排" },
+      // 第十二排 (最後一排連排)
+      { type: "label", text: "第十二排" }, { type: "seat", id: "s121" }, { type: "seat", id: "s122" }, { type: "seat", id: "s123" }, { type: "seat", id: "s124" }, { type: "empty", text: "" }
+    ];
+
     function loadSeats() {
-      document.getElementById("status-text").innerText = " 🔄 正在同步雲端資料... ";
+      document.getElementById("status-text").innerText = " 🔄 正在同步雲端最新選位狀態... ";
       
       fetch(API_URL)
         .then(res => res.json())
         .then(data => {
           if (data.status === "success") {
-            // 1. 更新輪次動態文字
             document.getElementById("round-box").innerText = `目前開放順序：1 ～ ${data.currentStep} 號`;
             
-            // 2. 渲染可選與預備名單
             let currentHtml = data.currentList.map(p => `<span class="person">${p.name} (${p.group || '個人'})</span>`).join('');
-            document.getElementById("current-list").innerHTML = currentHtml || "暫無";
+            document.getElementById("current-list").innerHTML = currentHtml || " 暫無 ";
             
             let nextHtml = data.nextList.map(p => `<span class="person">${p.name}</span>`).join('');
-            document.getElementById("next-list").innerHTML = nextHtml || "暫無";
-            
-            // 3. 座位圖渲染區（開啟 ready 狀態）
+            document.getElementById("next-list").innerHTML = nextHtml || " 暫無 ";
+
+            let totalSeatsCount = 0;
+            let occupiedCount = 0;
+            Object.keys(data.seats).forEach(key => {
+              totalSeatsCount++;
+              if (data.seats[key].name !== "") occupiedCount++;
+            });
+            document.getElementById("count-box").innerText = `已選 ${occupiedCount} 位｜剩餘 ${totalSeatsCount - occupiedCount} 位`;
+
+            const container = document.getElementById("bus-container");
+            container.innerHTML = ""; 
+
+            BUS_LAYOUT.forEach(item => {
+              const div = document.createElement("div");
+              div.className = `cell ${item.type}`;
+              
+              if (item.type === "seat") {
+                const dbSeat = data.seats[item.id] || { name: "", label: "①" };
+                
+                // 讀取顯示標籤 (試算表內像是 "第1排1號")，如果沒撈到就顯示隱藏小號碼
+                let displayNum = dbSeat.label ? dbSeat.label.replace(/第\d+排/, "") : "";
+                div.innerHTML = `<span class="num-hint">${displayNum}</span>`;
+                
+                if (dbSeat.name !== "") {
+                  div.classList.add("occupied");
+                  div.innerHTML += `<span class="name-text">${dbSeat.name}</span>`;
+                }
+                
+                div.onclick = () => handleSeatClick(item.id, dbSeat.name);
+              } else {
+                div.innerText = item.text || "";
+              }
+              container.appendChild(div);
+            });
+
             document.getElementById("bus-container").classList.add("ready");
-            document.getElementById("status-text").innerText = " ✅ 資料已是最新 ";
+            document.getElementById("status-text").innerText = " ✅ 雲端選位同步成功 ";
           }
         })
         .catch(() => {
-          document.getElementById("status-text").innerText = " ❌ 同步失敗，請手動刷新 ";
+          document.getElementById("status-text").innerText = " ❌ 資料同步失敗，請點選刷新按鈕重試 ";
         });
     }
 
-    // 點擊座位邏輯（含重疊攔截與管理員覆寫）
     function handleSeatClick(seatId, currentOwnerName) {
       if (currentOwnerName && !isAdminAuthenticated) {
-        alert(`❌ 慢了一步！這個位置已經被「${currentOwnerName}」選走了。\n請刷新網頁選擇其他空位。`);
+        alert(`❌ 慢了一步！這個座位已經被「${currentOwnerName}」選走了。\n請挑選其他空位。`);
         loadSeats(); 
         return;
       }
 
-      let msg = isAdminAuthenticated ? `【管理員覆寫模式】請輸入強制指派至此位置的乘客姓名：` : `請輸入您的完整姓名進行選位：`;
+      let msg = isAdminAuthenticated ? `【管理員覆寫模式】請輸入要指派到此座位的成員姓名：` : `請輸入您的姓名進行選位：`;
       let name = prompt(msg);
-      if (!name) return;
+      if (!name || name.trim() === "") return;
 
-      document.getElementById("status-text").innerText = " 💾 正在提交選位... ";
+      document.getElementById("status-text").innerText = " 💾 正在傳輸資料至雲端試算表... ";
 
       fetch(API_URL, {
         method: "POST",
         body: JSON.stringify({
           action: "selectSeat",
           seatId: seatId,
-          userName: name,
+          userName: name.trim(),
           isAdmin: isAdminAuthenticated
         })
       })
       .then(res => res.json())
       .then(result => {
         if (result.status === "success") {
-          alert("🎉 選位成功！");
+          alert("🎉 選位登記成功！");
           loadSeats();
         } else if (result.status === "already_taken") {
-          alert(`❌ 卡位失敗！選取期間該座位已被「${result.owner}」捷足先登！`);
+          alert(`❌ 送出失敗！此位置剛剛已被「${result.owner}」搶先一步登記了！`);
           loadSeats();
         } else {
-          alert("提示：" + result.message);
+          alert("系統提示：" + result.message);
         }
+      })
+      .catch(() => {
+        alert("網路訊號不穩，選位可能未成功，請重新再試");
+        loadSeats();
       });
     }
 
@@ -369,8 +433,10 @@
       document.getElementById("admin-status").innerText = isAdminAuthenticated ? "⚠️ 目前已驗證：管理員模式（可強制覆寫）" : "一般客人瀏覽模式";
     }
 
+    document.getElementById("status-text").style.cursor = "pointer";
+
     function goToBackend() {
-      alert("正在引導至後台管理試算表...");
+      alert("正在引導至試算表...");
       window.open("https://docs.google.com/spreadsheets/", "_blank");
     }
 
